@@ -29,7 +29,7 @@ import type { CameraState } from '../state';
 import type { CityModel, PinHit } from './cityModel';
 
 export const MAX_TILT_DEG = 70;
-export const DEFAULT_TILT_DEG = 20;
+export const DEFAULT_TILT_DEG = 48;
 /** A press that moves less than this (CSS px) and ends within TAP_MS is a tap, not a drag. */
 const TAP_SLOP_PX = { mouse: 5, touch: 10 };
 const TAP_MS = 500;

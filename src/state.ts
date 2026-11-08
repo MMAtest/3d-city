@@ -8,10 +8,10 @@ import { round, type LngLat } from './geo/projection';
 /** Building colours: one colour for all, or coloured by height ('ramp'). */
 export const BUILDING_STYLES = ['white', 'grey', 'sand', 'dark', 'ramp'] as const;
 export type BuildingStyle = (typeof BUILDING_STYLES)[number];
-/** The side of the square (m): 300 m to 4 km in 100 m steps. */
+/** Experimental Marseille build: 300 m to 6 km in 100 m steps. */
 export type AreaSize = number;
 export const AREA_MIN = 300;
-export const AREA_MAX = 4000;
+export const AREA_MAX = 6000;
 export const AREA_STEP = 100;
 export const clampSize = (m: number): AreaSize => Math.min(AREA_MAX, Math.max(AREA_MIN, Math.round(m / AREA_STEP) * AREA_STEP));
 /** "500 m", "1.5 km", "2 km" */

@@ -23,6 +23,8 @@ import { area, direction, distance, num, scale as localScale, t, translatePage }
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const PRESETS: Array<{ name: string; detail: string; center: LngLat; size: AreaSize; ex: number }> = [
+  { name: 'Marseille centre', detail: '1er, 2e, 6e et 7e — continent', center: { lat: 43.2930, lon: 5.3700 }, size: 6000, ex: 1.5 },
+  { name: 'Marseille · Vieux-Port', detail: 'Panier, Canebière, Saint-Victor', center: { lat: 43.2953, lon: 5.3723 }, size: 2400, ex: 1.5 },
   { name: 'Stuttgart', detail: t.presets.stuttgart, center: { lat: 48.7765, lon: 9.1772 }, size: 4000, ex: 2 },
   { name: 'Heidelberg', detail: t.presets.heidelberg, center: { lat: 49.4106, lon: 8.7065 }, size: 2000, ex: 1.5 },
   { name: 'Edinburgh', detail: t.presets.edinburgh, center: { lat: 55.9496, lon: -3.1835 }, size: 4000, ex: 1.5 },
@@ -44,6 +46,7 @@ const OWN_KEY = 'yp:own';
 let inviteOwn = !!state.center && !readFlag(OWN_KEY);
 let model: CityModel | null = null;
 let placeLabel = '';
+let placeMetaDetail = '';
 /** set when a shared link to open country is named after the nearest village */
 let placeNear = '';
 let loadToken = 0;
@@ -264,10 +267,11 @@ async function loadPlace(center: LngLat, opts: { label?: string; detail?: string
   state.center = center;
   state.camera = opts.camera ?? null;
   setMode('model');
-  placeLabel = opts.label ?? '';
+  const matchingPreset = PRESETS.find((p) => p.size === size && Math.abs(p.center.lat - center.lat) < 0.00001 && Math.abs(p.center.lon - center.lon) < 0.00001);
+  placeLabel = opts.label ?? matchingPreset?.name ?? '';
   placeNear = '';
-  setPlaceTitle(opts.label || formatLatLon(center), opts.detail ?? '');
-  if (!opts.label) {
+  setPlaceTitle(placeLabel || formatLatLon(center), opts.detail ?? matchingPreset?.detail ?? '');
+  if (!placeLabel) {
     reverse(center, signal).then((p) => {
       if (!stale() && p) {
         placeLabel = p.label;
@@ -560,7 +564,6 @@ function setPlaceTitle(title: string, detail: string): void {
   updateMeta();
 }
 
-let placeMetaDetail = '';
 function updateMeta(): void {
   const parts = [placeMetaDetail, area(state.size), t.terrainTimes(num(state.exaggeration, 1))].filter(Boolean);
   $('place-meta').textContent = parts.join(' · ');

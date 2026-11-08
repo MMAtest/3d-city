@@ -178,11 +178,11 @@ describe('view state URL', () => {
     expect(decodeState('#lat=10&lon=10&km=abc').size).toBe(2000);
   });
 
-  it('takes any area from 300 m to 4 km in 100 m steps, old links included', () => {
+  it('takes any area from 300 m to 6 km in 100 m steps, old links included', () => {
     const size = (km: string) => decodeState(`#lat=10&lon=10&km=${km}`).size;
     expect([size('1'), size('2'), size('4')]).toEqual([1000, 2000, 4000]);
     expect([size('1.5'), size('0.3'), size('3.7')]).toEqual([1500, 300, 3700]);
-    expect([size('1.23'), size('0.1'), size('9')]).toEqual([1200, 300, 4000]);
+    expect([size('1.23'), size('0.1'), size('9')]).toEqual([1200, 300, 6000]);
     const s: ViewState = { ...DEFAULT_STATE, center: { lat: 1, lon: 2 }, size: 1500 };
     expect(encodeState(s)).toContain('km=1.5');
     expect(decodeState(encodeState({ ...s, size: 500 })).size).toBe(500);
