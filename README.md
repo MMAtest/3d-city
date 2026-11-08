@@ -12,11 +12,11 @@ The **Marseille centre** preset covers a 6 × 6 km square. The neighbourhood exp
 
 - 11 quick-access areas for the 1st, 2nd, 6th and 7th arrondissements and the Frioul islands.
 - In-browser 3D terrain, coastlines, roads, green spaces, building extrusions, orbit/tilt/pan/zoom, pinning, share links and poster/STL exports from YourPlace3D.
-- **IGN BD TOPO height matching:** source from AFFLUE's real matching research for Vieux-Port and Cours Julien. Only spatially confident footprint matches are used; unmatched buildings retain the original OSM/estimated heights.
+- **IGN BD TOPO building inventory:** 16 official 1.5 km geographic tiles from IGN WFS, 71,376 distinct official building geometries within the Marseille 6 × 6 km square. These replace corresponding generalized OSM shapes; **3,065 additional OSM volumes without matching IGN footprints are retained** to avoid erasing missing constructions. Outside the 6 km inventory, OSM remains fully available. Original AFFLUE height matching remains available as a fallback.
 - **IGN RGE ALTI terrain grids:** resampled and blended gradually into the general terrain at patch edges.
 - **IGN LiDAR HD MNS/MNT 2021:** median roof-height difference (inside building footprints) on La Plaine / rue André-Poggioli; NOT a full photogrammetric 3D mesh.
 - **IGN BD ORTHO** optional textured ground on documented areas, in a switchable view. These photos are not facade geometry.
-- **Mobile overview LOD:** deterministic, spatially balanced building selection on large areas; close-up views use the complete data.
+- **All-building mobile overview:** every building is represented by a GPU-instanced, oriented 3D volume; **none are hidden** for performance. Zoom into an area for the actual polygon outlines in the source data. 16 gzip-compressed IGN tiles transfer about 2.3 MB instead of 11.1 MB.
 - **French user interface** with browser-language detection, alongside the upstream interface languages.
 - Smaller mobile GPU shadow maps and resolution caps, plus preserved native export capabilities.
 
@@ -39,16 +39,16 @@ Sources imported from the independent AFFLUE working branch `MMAtest/nucleaire@f
 
 | Scene | On-screen buildings | IGN footprint matches | LiDAR roof-height measurements | JS errors |
 |---|---:|---:|---:|---:|
-| Marseille centre, 6 × 6 km, desktop | 72,726 | 7,297 | 371 | 0 |
-| Cours Julien, 1.9 × 1.9 km, desktop | 18,899 | 6,541 | 371 | 0 |
-| Vieux-Port, 1.9 × 1.9 km, mobile emulation | 11,935 | 4,205 | 0 | 0 |
-| Marseille 6 × 6 km, mobile emulation | 17,077 (LOD) | 7,297* | 371* | 0 |
+| Marseille centre, 6 × 6 km, desktop | 74,441 volumes (71,376 IGN + 3,065 OSM) | 7,297 matched in older AFFLUE layer | 360 applied in IGN shapes | 0 |
+| Cours Julien, 1.9 × 1.9 km, desktop | 18,650 IGN footprints plus unmatched OSM structures | 6,541 matched in older AFFLUE layer | LiDAR applied where covered | 0 |
+| Vieux-Port, 1.9 × 1.9 km, desktop | 12,135 volumes (11,948 IGN + 187 OSM) | 4,205 matched in older AFFLUE layer | 0 | 0 |
+| Marseille 6 × 6 km, mobile emulation | 74,441 volumes (instanced) | 7,297* | 360 | 0 |
 
 *Spatial matches evaluated on input tile data, before the overview mobile subset is displayed.*
 
-These were run in Chromium with actual data services, not synthetic scenes. Emulation at 390 px **is not an FPS or thermal benchmark on a physical phone**. Tile CDN and browser cache can change load times. OSM and IGN are snapshots, and buildings can be mismatched; not to be used for measurement or cadastral decisions.
+New official footprint inventory added on 8 November 2026; counts differ from OSM because the two datasets represent building parts differently. These were run in Chromium with actual data services, not synthetic scenes. Emulation at 390 px **is not an FPS or thermal benchmark on a physical phone**. Tile CDN and browser cache can change load times. OSM and IGN are snapshots, and buildings can be mismatched; not to be used for measurement or cadastral decisions.
 
-Read [dataset provenance, usage limitations and licences](docs/DATA-PROVENANCE.md).
+Emprises IGN are source polygons, not textured photogrammetry: exterior walls and roof shapes are still approximated. Read [dataset provenance, usage limitations and licences](docs/DATA-PROVENANCE.md).
 
 ---
 

@@ -179,7 +179,7 @@ function matchIgn(spec: BuildingSpec, index: Map<string, SourceSpec[]>): number 
 }
 
 /** Robust estimate from MNS minus MNT, sampled INSIDE the building (no tree stand-ins). */
-function lidarHeight(spec: BuildingSpec, center: LngLat, lidar: Lidar): number | null {
+export function lidarHeight(spec: BuildingSpec, center: LngLat, lidar: Lidar): number | null {
   const proj = makeProjector(center);
   const c = centroid(spec.poly.outer);
   const ll = proj.toLngLat(c[0], c[1]);

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { makeProjector } from '../src/geo/projection';
 import { sampleRaster, patchTerrain, enrichBuildings, intersectsArea, EMPTY_STATS, type MarseilleDetails } from '../src/geo/marseilleDetail';
-import { mobileOverviewLod } from '../src/geo/marseilleLod';
 import type { BuildingSpec } from '../src/scene/buildingsMesh';
 import type { HeightGrid } from '../src/geo/terrain';
 
@@ -55,19 +54,5 @@ describe('AFFLUE / IGN integration',()=>{
   it('loads only intersecting Marseille zones',()=>{
     expect(intersectsArea(center,1500,bbox)).toBe(true);
     expect(intersectsArea({lon:3,lat:48},1000,bbox)).toBe(false);
-  });
-});
-describe('spatial mobile LOD',()=>{
-  it('preserves all structures in detail, but balances large overview coverage',()=>{
-    const specs=Array.from({length:20500},(_,i):BuildingSpec=>{
-      const e=(i%205)*18-1850, n=Math.floor(i/205)*18-900;
-      return {poly:{outer:[[e,n],[e+12,n],[e+12,n+12],[e,n+12]],holes:[]},height:5+(i%12),minHeight:0,estimated:false};
-    });
-    expect(mobileOverviewLod(specs,6000,false)).toHaveLength(specs.length);
-    expect(mobileOverviewLod(specs,1900,true)).toHaveLength(specs.length);
-    const mobile=mobileOverviewLod(specs,6000,true);
-    expect(mobile.length).toBeGreaterThan(16000);
-    expect(mobile.length).toBeLessThan(18500);
-    expect(mobileOverviewLod(specs,6000,true)).toEqual(mobile);
   });
 });

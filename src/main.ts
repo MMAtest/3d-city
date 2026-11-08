@@ -5,7 +5,7 @@ import { DATA_ZOOM, fetchTiles, parseTiles, settlementsFromTiles, tilesForSquare
 import { formatLatLon, makeProjector, squareBBox, type LngLat } from './geo/projection';
 import { loadHeightGrid } from './geo/terrain';
 import { loadMarseilleDetails, patchTerrain, enrichBuildings, EMPTY_STATS, type DetailStats } from './geo/marseilleDetail';
-import { mobileOverviewLod } from './geo/marseilleLod';
+import { loadIgnFootprints, mergeIgnFootprints, type FootprintStats } from './geo/ignFootprints';
 import { loadMarseilleOrthos } from './geo/marseilleOrtho';
 import { CityModel } from './scene/cityModel';
 import { BUILDING_COLOURS, HEIGHT_RAMP } from './scene/buildingsMesh';
@@ -49,6 +49,7 @@ const OWN_KEY = 'yp:own';
 let inviteOwn = !!state.center && !readFlag(OWN_KEY) && !(state.center.lat > 43.2 && state.center.lat < 43.4 && state.center.lon > 5.2 && state.center.lon < 5.5);
 let model: CityModel | null = null;
 let marseilleStats: DetailStats = EMPTY_STATS();
+let footprintStats: FootprintStats = { ignCount:0, ignoredOsm:0, ignoredDuplicate:0, loadedTiles:0, chosen:0, lidarMeasured:0, osmRestored:0 };
 let displayedBuildings = 0;
 let orthosShown = 0;
 let orthoEnabled = !!state.center && state.size <= 2600 && state.center.lat > 43.26 && state.center.lat < 43.32 && state.center.lon > 5.35 && state.center.lon < 5.4;
@@ -68,7 +69,7 @@ const debug = {
   stage: 'idle' as 'idle' | 'loading' | 'terrain' | 'ready' | 'error',
   timings: {} as Record<string, number>,
   stats: () => model?.stats() ?? null,
-  marseille: () => ({...marseilleStats, displayedBuildings, orthosShown}),
+  marseille: () => ({...marseilleStats, footprintStats, displayedBuildings, orthosShown}),
   /** used by tools/inspect to diagnose odd-looking models */
   inspect: () => model?.inspect() ?? null,
   camera: () => (model ? viewer.getCameraState() : null),
@@ -299,6 +300,10 @@ async function loadPlace(center: LngLat, opts: { label?: string; detail?: string
 
   const bbox = squareBBox(center, size);
   const terrainP = loadHeightGrid(center, size, gridResolution(size), signal);
+  const footprintP = loadIgnFootprints(center, size, signal).catch((error) => {
+    if (!signal.aborted) console.warn('Optional IGN building dataset failed', error);
+    return [];
+  });
   const detailP = loadMarseilleDetails(center, size, signal).catch((err) => {
     if (!signal.aborted) console.warn('Marseille extra data unavailable; OpenStreetMap base remains usable', err);
     return null;
@@ -310,15 +315,20 @@ async function loadPlace(center: LngLat, opts: { label?: string; detail?: string
     if (debug.source !== 'overpass') console.warn('Map tiles failed, falling back to Overpass', err);
     debug.source = 'overpass';
   };
-  const buildingsP: Promise<(m: CityModel) => void> = tilesP.then(
-    (d) => {
+  // Work with source tiles and official footprint tiles together. This avoids rendering
+  // an expensive OSM polygon mesh only to throw it away when the IGN mesh arrives.
+  const buildingsP: Promise<(m: CityModel) => void> = Promise.all([tilesP, footprintP]).then(
+    ([data, footprints]) => {
       debug.source = 'tiles';
       return (m: CityModel) => {
-        const specs = d.buildings.map((b) => ({ ...b, estimated: !b.heightKnown }));
+        const specs = data.buildings.map((b) => ({ ...b, estimated: !b.heightKnown }));
         const enriched = enrichBuildings(specs, center, resolvedDetails, marseilleStats);
-        const rendered = mobileOverviewLod(enriched, size, viewer.small);
-        displayedBuildings = rendered.length;
-        m.setBuildingSpecs(rendered);
+        const combined = mergeIgnFootprints(enriched, footprints, center, size, resolvedDetails?.lidar);
+        footprintStats = combined.stats;
+        displayedBuildings = combined.specs.length;
+        // All buildings in overview: fast oriented GPU instances, NEVER random deletions.
+        const overview = size >= 4500 || (viewer.small && size >= 2600 && combined.specs.length > 19000);
+        m.setBuildingSpecs(combined.specs, { overview });
       };
     },
     (err) => {
@@ -353,6 +363,7 @@ async function loadPlace(center: LngLat, opts: { label?: string; detail?: string
   resolvedDetails = await detailP;
   if (stale()) return;
   marseilleStats = patchTerrain(grid, center, resolvedDetails);
+  footprintStats = { ignCount:0, ignoredOsm:0, ignoredDuplicate:0, loadedTiles:0, chosen:0, lidarMeasured:0, osmRestored:0 };
   displayedBuildings = 0;
   updateMarseilleDetailNote(resolvedDetails != null);
 
@@ -795,14 +806,19 @@ async function refreshOrthos(): Promise<void> {
   }
 }
 
+function sizeDescriptionForDetail(): boolean {
+  return state.size >= 4500 || (viewer.small && state.size >= 2600 && displayedBuildings > 19000);
+}
+
 function updateMarseilleDetailNote(on: boolean): void {
   const host = $('marseille-detail-note');
   host.hidden = !on;
   if (!on) return;
-  host.textContent = 'AFFLUE × IGN : ' + marseilleStats.ignMatched.toLocaleString('fr-FR') + ' hauteurs BD TOPO, ' +
-    marseilleStats.lidarMatched.toLocaleString('fr-FR') + ' toitures LiDAR, ' +
+  host.textContent = 'AFFLUE × IGN : ' + (footprintStats.ignCount ? footprintStats.ignCount.toLocaleString('fr-FR') + ' emprises IGN, ' + (footprintStats.osmRestored ? footprintStats.osmRestored.toLocaleString('fr-FR') + ' bâtiments OSM conservés, ' : '') : '') + marseilleStats.ignMatched.toLocaleString('fr-FR') + ' correspondances BD TOPO, ' +
+    (footprintStats.ignCount ? footprintStats.lidarMeasured : marseilleStats.lidarMatched).toLocaleString('fr-FR') + ' toitures LiDAR, ' +
     (marseilleStats.terrainPoints + marseilleStats.lidarPoints).toLocaleString('fr-FR') + ' points de relief précisés.' +
-    (displayedBuildings ? ' ' + displayedBuildings.toLocaleString('fr-FR') + ' bâtiments affichés.' : '');
+    (displayedBuildings ? ' ' + displayedBuildings.toLocaleString('fr-FR') + ' bâtiments affichés.' : '') +
+    (sizeDescriptionForDetail() ? ' Vue générale : volumes allégés, aucun bâtiment supprimé. Double-cliquer pour les contours détaillés.' : ' Vue détaillée : contours des emprises IGN.');
 }
 
 function renderLegend(): void {

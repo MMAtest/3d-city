@@ -29,6 +29,7 @@ import { areaMask, waterMask } from '../export/water';
 import { Overlay } from './overlay';
 import type { OrthoPatch } from '../geo/marseilleOrtho';
 import { TerrainModel } from './terrainMesh';
+import { OverviewBuildings } from './buildingsOverview';
 
 export interface ModelStats {
   minElev: number;
@@ -61,6 +62,7 @@ export class CityModel {
   readonly terrain: TerrainModel;
   readonly overlay: Overlay;
   private buildings: { build: BuildingsBuild; mesh: Mesh<BufferGeometry, MeshStandardMaterial> } | null = null;
+  private overview: OverviewBuildings | null = null;
   private specs: BuildingSpec[] = [];
   /** what removeRoofBumps found when the buildings arrived (for tools/inspect) */
   private roofBumps: RoofBumpResult | null = null;
@@ -122,8 +124,16 @@ export class CityModel {
   }
 
   /** Buildings with heights already decided (vector tiles carry them). */
-  setBuildingSpecs(given: BuildingSpec[]): void {
+  setBuildingSpecs(given: BuildingSpec[], options: { overview?: boolean } = {}): void {
     this.clearBuildings();
+    if (options.overview) {
+      this.specs = given;
+      this.roofBumps = null;
+      this.overview = new OverviewBuildings(given, this.grid, this.exaggeration);
+      this.group.add(this.overview.mesh);
+      this.refreshPin();
+      return;
+    }
     // where the elevation data measured roofs, take the buildings back out of the ground first
     this.roofBumps = removeRoofBumps(this.grid, given);
     // and where OpenStreetMap had no height, the roof the data measured gives one
@@ -189,6 +199,7 @@ export class CityModel {
   /** Buildings for the 3D print: footprints and roof heights as shown (m above the lowest point). */
   printBuildings(): PrintBuilding[] {
     const b = this.buildings?.build;
+    if (!b && this.overview) return this.specs.map((spec, i) => ({ poly: spec.poly, top: this.overview!.roof(i) }));
     if (!b) return [];
     return this.specs.map((spec, i) => ({ poly: spec.poly, top: (b.buildingGround[i] - this.grid.min) * this.exaggeration + spec.height }));
   }
@@ -196,6 +207,7 @@ export class CityModel {
   /** What a ray from the camera hits: a building (pin goes inside it) or open ground. */
   pick(ray: Raycaster): PinHit | null {
     const targets: Object3D[] = [this.terrain.surface];
+    // A large overview uses true instancing; picking ground avoids N-box raycasting.
     if (this.buildings) targets.push(this.buildings.mesh);
     const hit = ray.intersectObjects(targets, false)[0];
     if (!hit) return null;
@@ -225,12 +237,13 @@ export class CityModel {
   }
 
   private refreshPin(): void {
-    this.pinned = this.buildings ? buildingsAt(this.buildings.build, this.specs, this.pinAt) : [];
+    this.pinned = this.buildings ? buildingsAt(this.buildings.build, this.specs, this.pinAt) : this.overview?.buildingsAt(this.pinAt) ?? [];
     this.paint();
     this.placePin();
   }
 
   private paint(): void {
+    if (this.overview) this.overview.paint(this.markPinned ? this.pinned : [], this.accent);
     if (!this.buildings) return;
     applyBuildingStyle(this.buildings.build, this.style);
     if (this.markPinned && this.pinned.length) paintBuildings(this.buildings.build, this.pinned, this.accent);
@@ -254,6 +267,7 @@ export class CityModel {
   setExaggeration(ex: number): void {
     this.terrain.setExaggeration(ex);
     if (this.buildings) setBuildingsExaggeration(this.buildings.build, ex, this.grid.min);
+    this.overview?.setExaggeration(ex);
     this.placePin();
   }
 
@@ -304,6 +318,7 @@ export class CityModel {
 
   setStyle(style: BuildingStyle): void {
     this.style = style;
+    this.overview?.setStyle(style);
     this.paint();
   }
 
@@ -326,6 +341,7 @@ export class CityModel {
    * buildings, and any building whose vertices stray outside its footprint.
    */
   inspect(): unknown {
+    if (this.overview) return { mode: 'instanced-overview', count: this.specs.length, sample: this.specs.slice(0,3).map(x=>({height:x.height,estimated:x.estimated})) };
     const b = this.buildings?.build;
     if (!b) return null;
     const pos = b.geometry.getAttribute('position');
@@ -380,19 +396,20 @@ export class CityModel {
 
   stats(): ModelStats {
     const b = this.buildings?.build;
+    const o = this.overview;
     return {
       minElev: this.grid.min,
       maxElev: this.grid.max,
-      buildings: b?.count ?? 0,
-      tallest: b?.maxHeight ?? 0,
-      estimatedShare: b && b.count ? b.estimatedCount / b.count : 0,
+      buildings: b?.count ?? o?.specs.length ?? 0,
+      tallest: b?.maxHeight ?? o?.maxHeight ?? 0,
+      estimatedShare: b && b.count ? b.estimatedCount / b.count : o && o.specs.length ? o.estimatedCount / o.specs.length : 0,
       contourInterval: this.uniforms.uInterval.value,
       seaShare: this.seaFraction,
     };
   }
 
   get hasBuildings(): boolean {
-    return !!this.buildings;
+    return !!this.buildings || !!this.overview;
   }
 
   private placePin(): void {
@@ -402,6 +419,7 @@ export class CityModel {
     let top = ground;
     const b = this.buildings?.build;
     if (b) for (const i of this.pinned) top = Math.max(top, (b.buildingGround[i] - this.grid.min) * this.exaggeration + this.specs[i].height);
+    if (this.overview) for (const i of this.pinned) top = Math.max(top, this.overview.roof(i));
     const stem = Math.max(this.grid.sizeM * 0.04, top - ground + this.grid.sizeM * 0.02);
     this.pin.position.set(e, ground, -n);
     const [stemMesh, head] = this.pin.children as Mesh[];
@@ -411,7 +429,12 @@ export class CityModel {
   }
 
   private clearBuildings(): void {
-    if (!this.buildings) return;
+    if (this.overview) {
+      this.group.remove(this.overview.mesh);
+      this.overview.dispose();
+      this.overview = null;
+    }
+    if (!this.buildings) { this.specs=[]; this.pinned=[]; return; }
     this.group.remove(this.buildings.mesh);
     this.buildings.mesh.geometry.dispose();
     this.buildings.mesh.material.dispose();

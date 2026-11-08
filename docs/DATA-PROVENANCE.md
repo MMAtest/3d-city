@@ -25,13 +25,22 @@ Cette scène sert à la **visualisation**, non à la validation de limites de pr
 
 La vue principale est un carré de **6 × 6 km**, et non l'union géodésique exacte des 1er, 2e, 6e et 7e arrondissements. Les quartiers hors emprise s'ouvrent via les boutons de navigation. Les îles du Frioul sont une vue séparée.
 
-Le LOD de la vue large réduit volontairement le nombre de bâtiments affichés sur appareils tactiles. Des bâtiments sont donc masqués en grand angle, puis rechargés dans les vues locales ; ne pas utiliser cette vue pour compter les bâtiments officiellement.
+Les 16 secteurs IGN de 1,5 km de côté sont extraits du WFS officiel BD TOPO. Au 8 novembre 2026, 72 445 géométries ont été reçues, dont 71 376 uniques après dédoublonnage des limites de tuiles. Sur le secteur officiel couvert, les polygones IGN remplacent les volumes OSM correspondants, mais les bâtiments OSM sans équivalent dans le recouvrement sont conservés (3 065 supplémentaires sur la vue générale au test du 8 novembre). Ailleurs, les emprises OSM restent intégralement disponibles. Ce rapprochement géométrique reste indicatif, certaines formes peuvent se superposer. Sur la grande vue, **aucun bâtiment n’est supprimé** : un rendu GPU instancié représente chaque emprise par une boîte orientée et simplifiée ; les vues locales utilisent les contours polygonaux exacts des emprises.
 
 ## Prochaines étapes documentées
 
-1. Construire des tuiles 3D incrémentales avec LOD continu selon altitude/caméra ; ne plus reconstruire tout le carré pour chaque zone.
+1. Construire un streaming 3D à plusieurs niveaux de détail selon la caméra sans reconstruire toute la scène : les 16 tuiles IGN chargent actuellement les données en un seul niveau et la vue générale utilise un instancing simplifié.
 2. Vérifier les sources OSM ↔ IGN par intersection polygonale et métriques de confiance, gérer les bâtiments divisés en `building:part`.
 3. Ajouter des **toitures LiDAR avec géométrie** et orthophotos correctement plaquées, sans prétendre couvrir des façades réelles.
 4. Limites administratives exactes (y compris le 2e portuaire et les îles), à partir de données libres documentées et mise à jour.
 5. Benchmarks de FPS, mémoire GPU et température sur vrais Android/iOS avant tout usage grand public.
 6. Modèles photogrammétriques tiers uniquement avec droits commerciaux et attribution explicite.
+
+## Inventaire officiel des bâtiments (8 novembre 2026)
+
+- Source : flux WFS Géoplateforme IGN `BDTOPO_V3:batiment`, requêtes `GetFeature` paginées. Licence Ouverte 2.0.
+- Script de génération : `scripts/fetch-ign-building-footprints.py`; les réponses WFS brutes sont ignorées dans Git (`data/ign-bdtopo-full-raw`) et les empreintes compactes sont versionnées dans `public/ign-buildings/`.
+- Le navigateur préfère 16 fichiers gzip (environ 2,31 Mio) et conserve les fichiers JSON ordinaires pour compatibilité (environ 11,08 Mio).
+- Les hauteurs IGN nulles utilisent une estimation (9 m ou nombre d’étages quand disponible) ; un échantillonnage LiDAR HD 2021 intervient là où il est disponible.
+- Les îles du Frioul et certaines zones en périphérie sont hors des 6 × 6 km de la couverture IGN ; on y conserve OSM sans fabriquer d’édifices.
+- Les données IGN peuvent inclure des emprises sans hauteur valide et des limites de bâtiments qui divergent des découpages OSM. La vue globale représente tous les bâtiments recensés, mais la simplification de leurs volumes n’est pas une reconstruction architecturale fidèle.
