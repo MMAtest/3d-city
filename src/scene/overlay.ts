@@ -8,6 +8,7 @@ import { CanvasTexture, LinearMipmapLinearFilter, SRGBColorSpace } from 'three';
 import type { AreaFeature, AreaKind, FeatureSet, LineFeature, LineKind } from '../geo/osm';
 import type { SeaMask } from '../geo/sea';
 import type { Layers } from '../state';
+import type { OrthoPatch } from '../geo/marseilleOrtho';
 
 export const PALETTE = {
   ground: '#ebe6dc',
@@ -52,6 +53,9 @@ export class Overlay {
   readonly canvas: HTMLCanvasElement;
   readonly texture: CanvasTexture;
   private seaLayer: HTMLCanvasElement | null = null;
+  private ortho: OrthoPatch[] = [];
+
+  setOrthos(patches: OrthoPatch[]): void { this.ortho = patches; }
 
   constructor(readonly px: number) {
     this.canvas = document.createElement('canvas');
@@ -95,6 +99,12 @@ export class Overlay {
     ctx.save();
     ctx.fillStyle = PALETTE.ground;
     ctx.fillRect(0, 0, W, W);
+    // Registered aerial photographs sit directly on the ground canvas, under water/roads.
+    // Canvas Y increases to the south; the source images start at their NORTH edge.
+    for (const patch of this.ortho) {
+      const [west, south, east, north] = patch.bounds;
+      ctx.drawImage(patch.image, (west + h) * s, (h - north) * s, (east - west) * s, (north - south) * s);
+    }
     if (!features) {
       ctx.restore();
       this.texture.needsUpdate = true;

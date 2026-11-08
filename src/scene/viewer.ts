@@ -83,7 +83,7 @@ export class Viewer {
 
   constructor(readonly canvas: HTMLCanvasElement) {
     this.renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.small ? 1.35 : 1.75));
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.toneMapping = NeutralToneMapping;
     this.renderer.toneMappingExposure = 1.0;
@@ -91,7 +91,7 @@ export class Viewer {
     this.renderer.shadowMap.type = PCFShadowMap;
 
     this.sun.castShadow = true;
-    const map = this.small ? 2048 : 4096;
+    const map = this.small ? 1024 : 2048;
     this.sun.shadow.mapSize.set(map, map);
     this.sun.shadow.radius = 2.5;
     this.scene.add(this.hemi, this.sun, this.sun.target, this.stage);

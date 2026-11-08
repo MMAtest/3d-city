@@ -1,3 +1,59 @@
+# Marseille 3D — AFFLUE Lab × YourPlace3D
+
+A standalone experimental 3D explorer of central Marseille, built on the open-source [YourPlace3D](https://github.com/yourplace3d/3d-city) engine and the IGN / OSM research produced in AFFLUE. Original YourPlace code remains MIT-licensed; datasets retain their respective licences.
+
+**[Open Marseille 3D preview](https://mmatest.github.io/3d-city/#lat=43.29300&lon=5.37000&km=6&ex=1.5&cam=0,52,15000,0,0)**
+
+![Real WebGL screenshot of the Cours Julien sector on the IGN-enhanced 3D model](docs/screenshots/cours-julien-ign-3d.jpg)
+
+The **Marseille centre** preset covers a 6 × 6 km square. The neighbourhood explorer also reaches places beyond that square (including **Arenc, Endoume, Roucas-Blanc and Frioul**) as separate local views; the 6 km square is **not an administratively exact combined footprint of four entire arrondissements**.
+
+## Implemented in the experiment
+
+- 11 quick-access areas for the 1st, 2nd, 6th and 7th arrondissements and the Frioul islands.
+- In-browser 3D terrain, coastlines, roads, green spaces, building extrusions, orbit/tilt/pan/zoom, pinning, share links and poster/STL exports from YourPlace3D.
+- **IGN BD TOPO height matching:** source from AFFLUE's real matching research for Vieux-Port and Cours Julien. Only spatially confident footprint matches are used; unmatched buildings retain the original OSM/estimated heights.
+- **IGN RGE ALTI terrain grids:** resampled and blended gradually into the general terrain at patch edges.
+- **IGN LiDAR HD MNS/MNT 2021:** median roof-height difference (inside building footprints) on La Plaine / rue André-Poggioli; NOT a full photogrammetric 3D mesh.
+- **IGN BD ORTHO** optional textured ground on documented areas, in a switchable view. These photos are not facade geometry.
+- **Mobile overview LOD:** deterministic, spatially balanced building selection on large areas; close-up views use the complete data.
+- **French user interface** with browser-language detection, alongside the upstream interface languages.
+- Smaller mobile GPU shadow maps and resolution caps, plus preserved native export capabilities.
+
+![Actual mobile WebGL screenshot of the Vieux-Port sector](docs/screenshots/vieux-port-mobile-ign-3d.jpg)
+
+## Reproduce
+
+```bash
+npm ci
+npm run dev
+npm test
+npm run build
+# optional interactive smoke test, uses installed Chrome and playwright
+node tools/check-marseille-v3.mjs
+```
+
+Sources imported from the independent AFFLUE working branch `MMAtest/nucleaire@feat/marseille-osm-3d-poc`; no changes were made to AFFLUE production.
+
+## Measured browser tests (Mac Chrome, 8 November 2026)
+
+| Scene | On-screen buildings | IGN footprint matches | LiDAR roof-height measurements | JS errors |
+|---|---:|---:|---:|---:|
+| Marseille centre, 6 × 6 km, desktop | 72,726 | 7,297 | 371 | 0 |
+| Cours Julien, 1.9 × 1.9 km, desktop | 18,899 | 6,541 | 371 | 0 |
+| Vieux-Port, 1.9 × 1.9 km, mobile emulation | 11,935 | 4,205 | 0 | 0 |
+| Marseille 6 × 6 km, mobile emulation | 17,077 (LOD) | 7,297* | 371* | 0 |
+
+*Spatial matches evaluated on input tile data, before the overview mobile subset is displayed.*
+
+These were run in Chromium with actual data services, not synthetic scenes. Emulation at 390 px **is not an FPS or thermal benchmark on a physical phone**. Tile CDN and browser cache can change load times. OSM and IGN are snapshots, and buildings can be mismatched; not to be used for measurement or cadastral decisions.
+
+Read [dataset provenance, usage limitations and licences](docs/DATA-PROVENANCE.md).
+
+---
+
+## Original YourPlace3D README
+
 # Your Place
 
 **Type any address and get the area around it as a 3D architect’s model: the real terrain underneath,

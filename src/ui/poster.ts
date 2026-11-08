@@ -15,6 +15,7 @@ export interface PosterInfo {
   center: LngLat;
   sizeM: number;
   exaggeration: number;
+  attribution?: string;
 }
 
 export const ATTRIBUTION_TEXT = `© OpenStreetMap ${t.footerContributors} (ODbL) · © OpenMapTiles · OpenFreeMap · ${t.footerTerrain} Mapzen, AWS Terrain Tiles`;
@@ -76,7 +77,7 @@ export async function makePoster(viewer: Viewer, info: PosterInfo, width = 2400)
   ctx.fillStyle = '#8a8378';
   ctx.font = `400 ${Math.round(W * 0.0125)}px ${sans}`;
   ctx.textBaseline = 'bottom';
-  ctx.fillText(ATTRIBUTION_TEXT, pad, H - footer * 0.12);
+  ctx.fillText(info.attribution || ATTRIBUTION_TEXT, pad, H - footer * 0.12);
 
   return new Promise((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error('PNG encoding failed'))), 'image/png'));
 }

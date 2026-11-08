@@ -4,6 +4,9 @@ import { buildingsQuery, featuresQuery, overpass, parseBuildings, parseFeatures,
 import { DATA_ZOOM, fetchTiles, parseTiles, settlementsFromTiles, tilesForSquare } from './geo/tiles';
 import { formatLatLon, makeProjector, squareBBox, type LngLat } from './geo/projection';
 import { loadHeightGrid } from './geo/terrain';
+import { loadMarseilleDetails, patchTerrain, enrichBuildings, EMPTY_STATS, type DetailStats } from './geo/marseilleDetail';
+import { mobileOverviewLod } from './geo/marseilleLod';
+import { loadMarseilleOrthos } from './geo/marseilleOrtho';
 import { CityModel } from './scene/cityModel';
 import { BUILDING_COLOURS, HEIGHT_RAMP } from './scene/buildingsMesh';
 import { isWebGL2Available, Viewer } from './scene/viewer';
@@ -43,8 +46,13 @@ const HOME_TITLE = document.title;
 let state: ViewState = decodeState(location.hash);
 /** Set once this browser has opened a place of its own; until then a shared model ends with an invitation. */
 const OWN_KEY = 'yp:own';
-let inviteOwn = !!state.center && !readFlag(OWN_KEY);
+let inviteOwn = !!state.center && !readFlag(OWN_KEY) && !(state.center.lat > 43.2 && state.center.lat < 43.4 && state.center.lon > 5.2 && state.center.lon < 5.5);
 let model: CityModel | null = null;
+let marseilleStats: DetailStats = EMPTY_STATS();
+let displayedBuildings = 0;
+let orthosShown = 0;
+let orthoEnabled = !!state.center && state.size <= 2600 && state.center.lat > 43.26 && state.center.lat < 43.32 && state.center.lon > 5.35 && state.center.lon < 5.4;
+let orthoRequestId = 0;
 let placeLabel = '';
 let placeMetaDetail = '';
 /** set when a shared link to open country is named after the nearest village */
@@ -60,6 +68,7 @@ const debug = {
   stage: 'idle' as 'idle' | 'loading' | 'terrain' | 'ready' | 'error',
   timings: {} as Record<string, number>,
   stats: () => model?.stats() ?? null,
+  marseille: () => ({...marseilleStats, displayedBuildings, orthosShown}),
   /** used by tools/inspect to diagnose odd-looking models */
   inspect: () => model?.inspect() ?? null,
   camera: () => (model ? viewer.getCameraState() : null),
@@ -89,6 +98,8 @@ viewer.onCameraChange(() => {
 viewer.onTap(movePinTo);
 
 renderPresets();
+renderMarseilleExplore();
+$('ortho-switch').setAttribute('aria-checked', String(orthoEnabled));
 renderLegend();
 syncControls();
 bindControls();
@@ -148,7 +159,7 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
 function overlayPixels(size: number): number {
   const gl = viewer.renderer.getContext();
   const max = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
-  const want = viewer.small || size <= 1000 ? 2048 : 4096;
+  const want = viewer.small || size >= 4500 || size <= 1000 ? 2048 : 4096;
   return Math.min(want, max);
 }
 
@@ -288,6 +299,10 @@ async function loadPlace(center: LngLat, opts: { label?: string; detail?: string
 
   const bbox = squareBBox(center, size);
   const terrainP = loadHeightGrid(center, size, gridResolution(size), signal);
+  const detailP = loadMarseilleDetails(center, size, signal).catch((err) => {
+    if (!signal.aborted) console.warn('Marseille extra data unavailable; OpenStreetMap base remains usable', err);
+    return null;
+  });
   // Map data: vector tiles from a CDN (fast, cached). Overpass only if the tiles fail.
   const tilesP = fetchTiles(tilesForSquare(center, size, DATA_ZOOM), signal).then((t) => parseTiles(t, center, size));
   const fallback = (err: unknown) => {
@@ -298,7 +313,13 @@ async function loadPlace(center: LngLat, opts: { label?: string; detail?: string
   const buildingsP: Promise<(m: CityModel) => void> = tilesP.then(
     (d) => {
       debug.source = 'tiles';
-      return (m: CityModel) => m.setBuildingSpecs(d.buildings.map((b) => ({ ...b, estimated: false })));
+      return (m: CityModel) => {
+        const specs = d.buildings.map((b) => ({ ...b, estimated: !b.heightKnown }));
+        const enriched = enrichBuildings(specs, center, resolvedDetails, marseilleStats);
+        const rendered = mobileOverviewLod(enriched, size, viewer.small);
+        displayedBuildings = rendered.length;
+        m.setBuildingSpecs(rendered);
+      };
     },
     (err) => {
       fallback(err);
@@ -313,6 +334,7 @@ async function loadPlace(center: LngLat, opts: { label?: string; detail?: string
     },
   );
   const nearbyP: Promise<Settlement[]> = tilesP.then((d) => d.settlements, () => []);
+  let resolvedDetails: Awaited<typeof detailP> = null;
   // avoid unhandled-rejection noise; errors are handled below
   buildingsP.catch(() => undefined);
   featuresP.catch(() => undefined);
@@ -328,6 +350,11 @@ async function loadPlace(center: LngLat, opts: { label?: string; detail?: string
     return;
   }
   if (stale()) return;
+  resolvedDetails = await detailP;
+  if (stale()) return;
+  marseilleStats = patchTerrain(grid, center, resolvedDetails);
+  displayedBuildings = 0;
+  updateMarseilleDetailNote(resolvedDetails != null);
 
   const next = new CityModel(grid, overlayPixels(size), accent);
   next.setExaggeration(state.exaggeration);
@@ -339,6 +366,8 @@ async function loadPlace(center: LngLat, opts: { label?: string; detail?: string
   model = next;
   viewer.setModel(next);
   old?.dispose();
+  orthosShown = 0;
+  if (orthoEnabled) void refreshOrthos();
   viewer.setCameraState(state.camera ?? viewer.defaultCamera());
   updateContourNote();
   status.set('terrain', 'done');
@@ -354,6 +383,7 @@ async function loadPlace(center: LngLat, opts: { label?: string; detail?: string
       viewer.requestRender();
       status.set('buildings', 'done');
       debug.timings.buildings = performance.now() - t0;
+      updateMarseilleDetailNote(resolvedDetails != null);
       describe();
       const count = next.stats().buildings;
       if (count < FEW_BUILDINGS) void offerNearby(center, size, count, stale);
@@ -629,6 +659,11 @@ function bindControls(): void {
     });
   }
 
+  $('ortho-switch').addEventListener('click', () => {
+    orthoEnabled = !orthoEnabled;
+    $('ortho-switch').setAttribute('aria-checked', String(orthoEnabled));
+    void refreshOrthos();
+  });
   $('compass-btn').addEventListener('click', () => viewer.resetNorth());
   $('reset-btn').addEventListener('click', () => viewer.resetView());
   bindShare();
@@ -703,6 +738,71 @@ function renderPresets(): void {
     });
     host.append(b);
   }
+}
+
+function renderMarseilleExplore(): void {
+  const MARSEILLE_STOPS: Array<{ name: string; district: string; center: LngLat; size: AreaSize }> = [
+  { name: 'Vieux-Port', district: '1er · 2e · 7e', center: { lat: 43.2953, lon: 5.3723 }, size: 1900 },
+  { name: 'Le Panier · La Major', district: '2e', center: { lat: 43.3009, lon: 5.3648 }, size: 1600 },
+  { name: 'Joliette', district: '2e', center: { lat: 43.3059, lon: 5.3661 }, size: 2100 },
+  { name: 'Arenc', district: '2e', center: { lat: 43.3146, lon: 5.3661 }, size: 2400 },
+  { name: 'Cours Julien · La Plaine', district: '6e', center: { lat: 43.2929, lon: 5.3840 }, size: 1900 },
+  { name: 'Castellane · Préfecture', district: '6e', center: { lat: 43.2875, lon: 5.3823 }, size: 2300 },
+  { name: 'Notre-Dame-de-la-Garde', district: '6e · 7e', center: { lat: 43.2846, lon: 5.3710 }, size: 1900 },
+  { name: 'Saint-Victor · Pharo', district: '7e', center: { lat: 43.2887, lon: 5.3658 }, size: 1900 },
+  { name: 'Endoume · Vallon des Auffes', district: '7e', center: { lat: 43.2836, lon: 5.3526 }, size: 2300 },
+  { name: 'Roucas-Blanc', district: '7e', center: { lat: 43.2767, lon: 5.3637 }, size: 2500 },
+  { name: 'Îles du Frioul', district: '7e · îles', center: { lat: 43.2759, lon: 5.3027 }, size: 3900 },
+];
+  const host = $('marseille-explore-stops');
+  for (const stop of MARSEILLE_STOPS) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'marseille-stop';
+    button.textContent = stop.name;
+    button.title = stop.district;
+    button.addEventListener('click', () => {
+      orthoEnabled = true;
+      $('ortho-switch').setAttribute('aria-checked', 'true');
+      void openPlace({ label: stop.name, detail: 'Marseille ' + stop.district + ' · © OSM / IGN', center: stop.center }, { size: stop.size, ex: 1.2 });
+    });
+    host.append(button);
+  }
+  $('marseille-overview').addEventListener('click', () => {
+    orthoEnabled = false;
+    $('ortho-switch').setAttribute('aria-checked', 'false');
+    const city = PRESETS.find((p) => p.name === 'Marseille centre')!;
+    void openPlace({ label: city.name, detail: city.detail, center: city.center }, { size: city.size, ex: city.ex });
+  });
+}
+async function refreshOrthos(): Promise<void> {
+  const currentModel = model, center = state.center, size = state.size;
+  const id = ++orthoRequestId;
+  orthosShown = 0;
+  if (!currentModel || !center) return;
+  if (!orthoEnabled) { currentModel.setOrthos([]); viewer.requestRender(); return; }
+  try {
+    const orthos = await loadMarseilleOrthos(center, size, abort?.signal);
+    if (id !== orthoRequestId || model !== currentModel || !orthoEnabled) return;
+    orthosShown = orthos.length;
+    currentModel.setOrthos(orthos);
+    viewer.requestRender();
+    if (orthos.length === 0) toast('Orthophotos IGN disponibles uniquement sur le Vieux-Port et le Cours Julien.', 4000);
+  } catch (error) {
+    if (id !== orthoRequestId || abort?.signal.aborted) return;
+    console.warn('IGN aerial imagery unavailable', error);
+    toast('Impossible de charger les orthophotos IGN.', 4000);
+  }
+}
+
+function updateMarseilleDetailNote(on: boolean): void {
+  const host = $('marseille-detail-note');
+  host.hidden = !on;
+  if (!on) return;
+  host.textContent = 'AFFLUE × IGN : ' + marseilleStats.ignMatched.toLocaleString('fr-FR') + ' hauteurs BD TOPO, ' +
+    marseilleStats.lidarMatched.toLocaleString('fr-FR') + ' toitures LiDAR, ' +
+    (marseilleStats.terrainPoints + marseilleStats.lidarPoints).toLocaleString('fr-FR') + ' points de relief précisés.' +
+    (displayedBuildings ? ' ' + displayedBuildings.toLocaleString('fr-FR') + ' bâtiments affichés.' : '');
 }
 
 function renderLegend(): void {
@@ -884,7 +984,7 @@ function bindShare(): void {
     posterBtn.disabled = true;
     msg.textContent = t.renderingPoster;
     try {
-      const blob = await makePoster(viewer, { title: title(), subtitle: subtitle(), center: state.center, sizeM: state.size, exaggeration: state.exaggeration });
+      const blob = await makePoster(viewer, { title: title(), subtitle: subtitle(), center: state.center, sizeM: state.size, exaggeration: state.exaggeration, attribution: marseilleStats.ignMatched || marseilleStats.terrainPoints ? '© OpenStreetMap ODbL · © IGN Licence Ouverte 2.0 · Mapzen/AWS Terrain' : undefined });
       saveBlob(blob, posterFileName(title(), state.size));
       msg.textContent = '';
       dialog.close();
@@ -920,7 +1020,7 @@ function bindShare(): void {
       const brokenBuildings = tris.skipped;
       // the title in raised letters on a strip in front of the model
       const label = $<HTMLInputElement>('print-ledge').checked ? addLabel(tris, await loadGlyphs(), [name, subtitle()], printMm, PRINT_BASE_MM) : null;
-      const stl = toBinaryStl(tris, `${name}, ${state.size / 1000} km, ${scale}, terrain x${state.exaggeration.toFixed(1)}`);
+      const stl = toBinaryStl(tris, `${marseilleStats.ignMatched || marseilleStats.terrainPoints ? 'IGN Licence Ouverte 2.0 / OSM ODbL; ' : 'OSM ODbL; '}${name}, ${state.size / 1000} km, ${scale}`);
       saveBlob(new Blob([stl], { type: 'model/stl' }), exportFileName(name, state.size, `${printMm / 10}cm.stl`));
       const mb = num(stl.byteLength / 1048576, stl.byteLength < 10485760 ? 1 : 0);
       const depth = label ? Math.round(label.depthMm) : 0;
@@ -970,6 +1070,7 @@ function bindShare(): void {
       terrain.done.roads ? t.readmeRoads(num(ROAD_RAISE_MM, 1)) : '',
       '',
       t.readmeCredit,
+      marseilleStats.ignMatched || marseilleStats.terrainPoints ? '© IGN Géoplateforme (BD TOPO, RGE ALTI et LiDAR HD 2021), Licence Ouverte 2.0. Photos aériennes BD ORTHO : année de capture non établie.' : '',
     ].filter((l, i, a) => l || a[i - 1]).join('\n');
     files.push({ name: 'README.txt', data: new TextEncoder().encode(readme) });
     const zip = makeZip(files);

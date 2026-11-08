@@ -10,12 +10,14 @@
 
 import { de } from './de';
 import { en, type Messages } from './en';
+import { fr } from './fr';
 import { es } from './es';
 import { pt } from './pt';
 
-export type Lang = 'en' | 'es' | 'pt' | 'de';
+export type Lang = 'en' | 'es' | 'pt' | 'de' | 'fr';
 
 export const LANGS: ReadonlyArray<{ code: Lang; name: string; locale: string }> = [
+  { code: 'fr', name: 'Français', locale: 'fr-FR' },
   { code: 'en', name: 'English', locale: 'en-GB' },
   // Latin American Spanish, with Mexico's numbers (1.5, 13,300)
   { code: 'es', name: 'Español', locale: 'es-MX' },
@@ -23,7 +25,7 @@ export const LANGS: ReadonlyArray<{ code: Lang; name: string; locale: string }> 
   { code: 'de', name: 'Deutsch', locale: 'de-DE' },
 ];
 
-export const MESSAGES: Record<Lang, Messages> = { en, es, pt, de };
+export const MESSAGES: Record<Lang, Messages> = { en, es, pt, de, fr };
 
 const KEY = 'yp:lang';
 

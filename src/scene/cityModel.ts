@@ -27,6 +27,7 @@ import type { PrintBuilding } from '../export/stl';
 import type { PrintRoad } from '../export/roads';
 import { areaMask, waterMask } from '../export/water';
 import { Overlay } from './overlay';
+import type { OrthoPatch } from '../geo/marseilleOrtho';
 import { TerrainModel } from './terrainMesh';
 
 export interface ModelStats {
@@ -304,6 +305,11 @@ export class CityModel {
   setStyle(style: BuildingStyle): void {
     this.style = style;
     this.paint();
+  }
+
+  setOrthos(patches: OrthoPatch[]): void {
+    this.overlay.setOrthos(patches);
+    this.overlay.draw(this.features, this.grid.sizeM, this.layers);
   }
 
   setLayers(layers: Layers): void {

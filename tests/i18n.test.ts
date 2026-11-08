@@ -31,9 +31,9 @@ describe('languages', () => {
   it('picks the visitor’s choice, else the first browser language it has, else English', () => {
     expect(pickLang('de', ['pt-BR'])).toBe('de');
     expect(pickLang(null, ['pt-BR', 'en'])).toBe('pt');
-    expect(pickLang(null, ['fr-FR', 'de-AT'])).toBe('de');
+    expect(pickLang(null, ['fr-FR', 'de-AT'])).toBe('fr');
     expect(pickLang(null, ['es-MX', 'en'])).toBe('es');
-    expect(pickLang(null, ['fr-FR', 'it'])).toBe('en');
+    expect(pickLang(null, ['fr-FR', 'it'])).toBe('fr');
     expect(pickLang('xx', ['en-US'])).toBe('en');
   });
 

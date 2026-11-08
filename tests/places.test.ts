@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { t } from '../src/i18n';
 import { distanceM, photonPlace, placeKind, resolveToSettlement } from '../src/geo/geocode';
 import { compassWord, formatDistance, parseSettlements, pickSettlement, settlementsQuery, type OverpassResponse } from '../src/geo/osm';
 
@@ -49,7 +50,7 @@ describe('resolving a postcode to its village', () => {
     const r = await resolveToSettlement({ label: '84999', detail: 'Kleinfelde, Germany', center: POSTCODE_MIDDLE, kind: 'postcode', settlement: 'Kleinfelde' });
     expect(r?.label).toBe('Kleinfelde');
     expect(r?.center).toEqual(VILLAGE);
-    expect(r?.detail).toBe('Postcode 84999 · Germany');
+    expect(r?.detail).toBe(t.postcodeOf('84999') + ' · Germany');
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 

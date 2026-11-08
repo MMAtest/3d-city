@@ -1218,3 +1218,20 @@ input[type='range'] {
   font-size: 13px;
   color: var(--muted);
 }
+
+/* AFFLUE Marseille neighbourhood explorer – self-contained inside settings */
+.marseille-explore { border: 1px solid var(--border); background: var(--surface-sunk); border-radius: 14px; margin: 12px 0 18px; padding: 14px 12px; }
+.marseille-explore-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.marseille-explore-kicker { font-size: 10px; letter-spacing: .13em; color: var(--accent-text); font-weight: 800; }
+#marseille-overview { border: 1px solid var(--border); background: var(--surface); padding: 6px 8px; border-radius: 8px; cursor: pointer; font-size: 11px; white-space: nowrap; }
+.marseille-explore-lead { font-size: 13px; font-weight: 650; margin: 9px 0; }
+.marseille-stops { display: flex; flex-wrap: wrap; gap: 6px; }
+.marseille-stop { border: 1px solid var(--border); border-radius: 8px; background: var(--surface-solid); padding: 7px 9px; font-size: 11px; font-weight: 600; cursor: pointer; transition: border-color .2s, transform .2s, background .2s; }
+.marseille-stop:hover, .marseille-stop:focus-visible { border-color: var(--accent); background: var(--surface); transform: translateY(-1px); }
+.marseille-detail-note { color: var(--accent-text); font-size: 11px; line-height: 1.55; font-weight: 650; margin: 10px 0 4px; }
+.marseille-license { font-size: 10px; color: var(--faint); line-height: 1.5; margin: 10px 0 0; }
+
+.marseille-ortho { display: flex; align-items:center; justify-content:space-between; gap: 8px; border-top: 1px solid var(--border); padding-top: 12px; margin-top: 12px; }
+.marseille-ortho strong { display:block; font-size: 12px; }
+.marseille-ortho span { display:block; font-size: 10px; color: var(--muted); max-width: 215px; line-height: 1.4; }
+.marseille-ortho .switch { flex: none; }
