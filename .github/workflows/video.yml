@@ -35,12 +35,6 @@ jobs:
       - name: Render
         run: node tools/video/render.mjs
 
-      - name: Keep the files with this run
-        uses: actions/upload-artifact@v4
-        with:
-          name: promo-video
-          path: video-out/*
-
       - name: Draft release with the videos
         env:
           GH_TOKEN: ${{ github.token }}
